@@ -1,0 +1,8 @@
+node_modules/
+.env
+uploads/
+processed/
+temp_crops/
+*.rar
+*.zip
+.vscode/
