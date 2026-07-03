@@ -367,6 +367,8 @@ function loadCurrentImage() {
 
     UI.placeholder.style.display = 'none';
     UI.image.style.display = 'block';
+    UI.image.classList.add('fade-in-up');
+    setTimeout(() => UI.image.classList.remove('fade-in-up'), 500);
 
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
     currentObjectUrl = URL.createObjectURL(file);
@@ -375,6 +377,15 @@ function loadCurrentImage() {
     UI.btnCrop.disabled = false;
     UI.btnSkip.disabled = false;
     updateUndoButtonState();
+
+    // Preload next image to browser cache
+    if (currentFileIndex + 1 < gifFiles.length) {
+        const nextFile = gifFiles[currentFileIndex + 1];
+        const tempImg = new Image();
+        const tempUrl = URL.createObjectURL(nextFile);
+        tempImg.src = tempUrl;
+        tempImg.onload = () => URL.revokeObjectURL(tempUrl);
+    }
 
     if (cropper) {
         cropper.destroy();
@@ -597,6 +608,13 @@ document.addEventListener('keydown', (e) => {
         e.preventDefault();
         performCrop();
     }
+    // Ctrl + Z keyboard shortcut for undo
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        if (!UI.btnUndo.disabled) {
+            e.preventDefault();
+            UI.btnUndo.click();
+        }
+    }
 });
 
 let lastTap = 0;
@@ -631,6 +649,13 @@ function updateCounters() {
 
     UI.completedGifs.textContent = completedAllTotal;
     UI.remainingGifs.textContent = originalTotal - completedAllTotal;
+
+    // Update global progress bar
+    const progressPercent = originalTotal > 0 ? (completedAllTotal / originalTotal) * 100 : 0;
+    const bar = document.getElementById('globalProgressBar');
+    if (bar) {
+        bar.style.width = `${progressPercent}%`;
+    }
 }
 
 UI.btnFinalize.addEventListener('click', () => {

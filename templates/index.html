@@ -95,21 +95,17 @@
                 </button>
             </div>
 
-            <div class="sidebar-footer"
-                style="margin-top: auto; padding-top: 15px; border-top: 1px solid var(--panel-border); display: flex; flex-direction: column; gap: 10px;">
-                <div id="lastCropContainer"
-                    style="display:none; text-align: center; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 8px;">
+            <div class="sidebar-footer">
+                <div id="lastCropContainer" style="display:none; text-align: center; background: rgba(0,0,0,0.05); padding: 10px; border-radius: 8px; margin-bottom: 8px;">
                     <small style="color: var(--text-muted); display:block; margin-bottom:5px;">Last Cropped:</small>
                     <img id="lastCropImg" src="" style="max-height: 80px; max-width: 100%; border-radius: 4px;">
                 </div>
-                <button id="resetAppBtn" class="logout-sidebar-btn"
-                    style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.5);">
+                <button id="resetAppBtn" class="logout-sidebar-btn btn-reset">
                     <i class="fas fa-trash-alt"></i> Reset Software
                 </button>
-                <button id="logoutBtn" onclick="logout()" class="logout-sidebar-btn"
-                    style="color: var(--text-main); border: 1px solid var(--border-color); background: transparent;">
-                    <i class="fas fa-sign-out-alt"></i> Logout Session
-                </button>
+                <div style="text-align: center; margin-top: 8px;">
+                    <span class="version-badge">v2.0.0 Pro</span>
+                </div>
             </div>
         </aside>
 
@@ -120,6 +116,11 @@
 
         <!-- Main Content -->
         <main class="main-content">
+            <!-- Global Progress Bar -->
+            <div class="global-progress">
+                <div id="globalProgressBar" class="global-progress-bar"></div>
+            </div>
+
             <div class="header">
                 <div style="display:flex; align-items:center; gap: 15px;">
                     <button id="themeToggle" class="theme-toggle" title="Toggle Light/Dark Mode">
@@ -129,10 +130,10 @@
                 </div>
                 <div class="actions">
                     <button id="btnUndo" class="secondary-btn undo-btn" title="Undo Last Crop" disabled>
-                        <i class="fas fa-undo"></i> Undo
+                        <i class="fas fa-undo"></i> Undo <span class="kbd-hint"><kbd class="kbd">Ctrl</kbd>+<kbd class="kbd">Z</kbd></span>
                     </button>
                     <button id="btnCrop" class="primary-btn" disabled>
-                        <i class="fas fa-cut"></i> Next Cropped <span id="nextCropLabel">R1</span> (Enter)
+                        <i class="fas fa-cut"></i> Next Cropped <span id="nextCropLabel">R1</span> <span class="kbd-hint"><kbd class="kbd">Enter</kbd></span>
                     </button>
                     <button id="btnSkip" class="secondary-btn" title="Skip current GIF" disabled>
                         <i class="fas fa-forward"></i> Skip
