@@ -55,11 +55,11 @@ app.get('/', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-    res.sendFile(path.join(__dirname, 'templates', 'login.html'));
+    res.redirect('/');
 });
 
 app.get('/reset-password', (req, res) => {
-    res.sendFile(path.join(__dirname, 'templates', 'reset-password.html'));
+    res.redirect('/');
 });
 
 app.post('/upload', upload.array('files[]'), (req, res) => {
