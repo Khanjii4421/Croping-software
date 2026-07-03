@@ -55,8 +55,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-    // Auth removed - redirect to main app
-    res.redirect('/');
+    res.sendFile(path.join(__dirname, 'templates', 'login.html'));
 });
 
 app.get('/reset-password', (req, res) => {
