@@ -18,6 +18,11 @@
 </head>
 
 <body class="light-theme">
+    <!-- Glowing background elements for Glassmorphism -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
     <div class="app-container">
         <!-- Sidebar -->
         <aside class="sidebar">
@@ -90,7 +95,7 @@
                     <!-- Download links appear here -->
                 </div>
                 <button id="btnFinalize" class="primary-btn"
-                    style="margin-top:15px; width:100%; display:none; background: linear-gradient(to right, #2b5876, #4e4376);">
+                    style="margin-top:15px; width:100%; display:none;">
                     <i class="fas fa-box"></i> Pack All to Master RAR
                 </button>
             </div>
@@ -102,8 +107,7 @@
                     <small style="color: var(--text-muted); display:block; margin-bottom:5px;">Last Cropped:</small>
                     <img id="lastCropImg" src="" style="max-height: 80px; max-width: 100%; border-radius: 4px;">
                 </div>
-                <button id="resetAppBtn" class="logout-sidebar-btn"
-                    style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.5); width: 100%;">
+                <button id="resetAppBtn" class="logout-sidebar-btn">
                     <i class="fas fa-trash-alt"></i> Reset Software
                 </button>
             </div>
