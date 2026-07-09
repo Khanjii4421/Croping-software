@@ -1,223 +1,213 @@
-let cropper;
-let gifFiles = []; // will store File objects
+// ============================================================
+//  GIF / Archive Cropper  –  app.js
+// ============================================================
+
+// ── State ────────────────────────────────────────────────────
+let cropper          = null;
+let currentObjectUrl = null;
+
+// Direct-GIF mode (legacy)
+let gifFiles        = [];
 let currentFileIndex = 0;
-let currentCropIndex = 1; // 1 to 8
-let currentCrops = []; // Store blobs for current GIF
-let outputDirHandle = null;
 
-const CROP_LABELS = {
-    1: 'R1', 2: 'R2', 3: 'R3', 4: 'R4',
-    5: 'L1', 6: 'L2', 7: 'L3', 8: 'L4'
+// Archive mode
+let archiveFiles         = [];   // File objects for the archives
+let currentArchiveIndex  = 0;
+let archiveStepMap       = {};   // { stepIndex: { url, filename } }
+let archiveBaseName      = '';
+let archiveMode          = false;
+let uploadedFolderName   = '';
+
+// Common
+let currentCropIndex = 1;        // 1–8
+let currentCrops     = [];       // [ { filename, blob } ]
+let dlCount          = 0;
+let outputDirHandle  = null;
+let currentLoadedImageSrc = null;
+
+// User's preferred order: L1, L2, L3, L4, then R1, R2, R3, R4
+const CROP_LABELS   = { 
+    1: 'L1', 2: 'L2', 3: 'L3', 4: 'L4', 
+    5: 'R1', 6: 'R2', 7: 'R3', 8: 'R4' 
 };
-const CROP_SUFFIXES = CROP_LABELS; // just mapping
+const CROP_SUFFIXES = CROP_LABELS;
 
+// ── UI References ────────────────────────────────────────────
 const UI = {
-    folderInput: document.getElementById('folderInput'),
-    totalGifs: document.getElementById('totalGifs'),
-    completedGifs: document.getElementById('completedGifs'),
-    remainingGifs: document.getElementById('remainingGifs'),
-    currentFileName: document.getElementById('currentFileName'),
-    cropTargetName: document.getElementById('cropTargetName'),
-    nextCropLabel: document.getElementById('nextCropLabel'),
-    btnCrop: document.getElementById('btnCrop'),
-    btnSkip: document.getElementById('btnSkip'),
-    image: document.getElementById('image'),
-    placeholder: document.querySelector('.placeholder-content'),
+    folderInput:        document.getElementById('folderInput'),
+    totalGifs:          document.getElementById('totalGifs'),
+    completedGifs:      document.getElementById('completedGifs'),
+    remainingGifs:      document.getElementById('remainingGifs'),
+    currentFileName:    document.getElementById('currentFileName'),
+    cropTargetName:     document.getElementById('cropTargetName'),
+    nextCropLabel:      document.getElementById('nextCropLabel'),
+    btnCrop:            document.getElementById('btnCrop'),
+    btnSkip:            document.getElementById('btnSkip'),
+    image:              document.getElementById('image'),
+    placeholder:        document.querySelector('.placeholder-content'),
     cropStepsContainer: document.querySelector('.crop-steps'),
-    downloadLinks: document.getElementById('downloadLinks'),
-    downloadCount: document.getElementById('downloadCount'),
-    themeToggle: document.getElementById('themeToggle'),
-    themeIcon: document.getElementById('themeIcon'),
-    sidebarToggle: document.getElementById('sidebarToggle'),
-    sidebar: document.querySelector('.sidebar'),
-    sidebarToggleIcon: document.getElementById('sidebarToggleIcon'),
-    btnUndo: document.getElementById('btnUndo'),
-    body: document.body,
-    btnFinalize: document.getElementById('btnFinalize'),
-    lastCropContainer: document.getElementById('lastCropContainer'),
-    lastCropImg: document.getElementById('lastCropImg'),
+    downloadLinks:      document.getElementById('downloadLinks'),
+    downloadCount:      document.getElementById('downloadCount'),
+    themeToggle:        document.getElementById('themeToggle'),
+    themeIcon:          document.getElementById('themeIcon'),
+    sidebarToggle:      document.getElementById('sidebarToggle'),
+    sidebar:            document.querySelector('.sidebar'),
+    sidebarToggleIcon:  document.getElementById('sidebarToggleIcon'),
+    btnUndo:            document.getElementById('btnUndo'),
+    body:               document.body,
+    btnFinalize:        document.getElementById('btnFinalize'),
+    lastCropContainer:  document.getElementById('lastCropContainer'),
+    lastCropImg:        document.getElementById('lastCropImg'),
     selectOutputDirBtn: document.getElementById('selectOutputDirBtn'),
-    outputPathDisplay: document.getElementById('outputPathDisplay'),
-    resetAppBtn: document.getElementById('resetAppBtn')
+    outputPathDisplay:  document.getElementById('outputPathDisplay'),
+    resetAppBtn:        document.getElementById('resetAppBtn')
 };
 
-// Theme Toggle Logic
-const savedTheme = localStorage.getItem('theme') || 'light';
-if (savedTheme === 'light') {
-    document.body.classList.add('light-theme');
-    UI.themeIcon.classList.remove('fa-sun');
-    UI.themeIcon.classList.add('fa-moon');
-} else {
-    document.body.classList.remove('light-theme');
-    UI.themeIcon.classList.remove('fa-moon');
-    UI.themeIcon.classList.add('fa-sun');
-}
+// ── Toast Helper ──────────────────────────────────────────────
+const Toast = Swal.mixin({
+    toast: true,
+    position: 'top-end',
+    showConfirmButton: false,
+    timer: 2000,
+    timerProgressBar: true
+});
+
+// ── Theme ─────────────────────────────────────────────────────
+(function applyTheme() {
+    const saved = localStorage.getItem('theme') || 'light';
+    if (saved === 'light') {
+        document.body.classList.add('light-theme');
+        UI.themeIcon.classList.replace('fa-sun', 'fa-moon');
+    } else {
+        document.body.classList.remove('light-theme');
+        UI.themeIcon.classList.replace('fa-moon', 'fa-sun');
+    }
+})();
 
 UI.themeToggle.addEventListener('click', () => {
     document.body.classList.toggle('light-theme');
     if (document.body.classList.contains('light-theme')) {
-        UI.themeIcon.classList.remove('fa-sun');
-        UI.themeIcon.classList.add('fa-moon');
+        UI.themeIcon.classList.replace('fa-sun',  'fa-moon');
         localStorage.setItem('theme', 'light');
     } else {
-        UI.themeIcon.classList.remove('fa-moon');
-        UI.themeIcon.classList.add('fa-sun');
+        UI.themeIcon.classList.replace('fa-moon', 'fa-sun');
         localStorage.setItem('theme', 'dark');
     }
 });
 
-/* =========================================================================
-   INDEXEDDB SESSION PERSISTENCE LOGIC
-   ========================================================================= */
-const DB_NAME = 'GIFCropperSession';
+// ── Sidebar Toggle ────────────────────────────────────────────
+UI.sidebarToggle.addEventListener('click', () => {
+    UI.sidebar.classList.toggle('hidden');
+    const icon = UI.sidebarToggleIcon;
+    if (UI.sidebar.classList.contains('hidden')) {
+        icon.classList.replace('fa-chevron-left',  'fa-chevron-right');
+    } else {
+        icon.classList.replace('fa-chevron-right', 'fa-chevron-left');
+    }
+    setTimeout(() => { if (cropper) cropper.resize(); }, 400);
+});
+
+// ── IndexedDB Session Persistence ─────────────────────────────
+const DB_NAME   = 'GIFCropperSession';
 const DB_VERSION = 1;
 const STORE_NAME = 'workspaceData';
-
 let db;
 
 function openDatabase() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onupgradeneeded = (e) => {
-            const tempDb = e.target.result;
-            if (!tempDb.objectStoreNames.contains(STORE_NAME)) {
-                tempDb.createObjectStore(STORE_NAME);
-            }
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = e => {
+            const d = e.target.result;
+            if (!d.objectStoreNames.contains(STORE_NAME)) d.createObjectStore(STORE_NAME);
         };
-        request.onsuccess = (e) => {
-            db = e.target.result;
-            resolve(db);
-        };
-        request.onerror = (e) => reject(e.target.error);
+        req.onsuccess = e => { db = e.target.result; resolve(db); };
+        req.onerror   = e => reject(e.target.error);
     });
 }
 
 function saveSessionState() {
     if (!db) return;
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    const store = transaction.objectStore(STORE_NAME);
-
-    // Save current required state
-    store.put(gifFiles, 'gifFiles');
-    store.put(currentFileIndex, 'currentFileIndex');
-    store.put(localStorage.getItem('original_total_gifs'), 'originalTotal');
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const s  = tx.objectStore(STORE_NAME);
+    s.put(gifFiles,        'gifFiles');
+    s.put(currentFileIndex,'currentFileIndex');
+    s.put(localStorage.getItem('original_total_gifs'), 'originalTotal');
 }
 
 async function loadSessionState() {
     await openDatabase();
     return new Promise((resolve, reject) => {
-        const transaction = db.transaction(STORE_NAME, 'readonly');
-        const store = transaction.objectStore(STORE_NAME);
-
-        const reqFiles = store.get('gifFiles');
-        const reqIndex = store.get('currentFileIndex');
-        const reqTotal = store.get('originalTotal');
-
-        let loadedFiles = [], loadedIndex = 0, loadedTotal = "0";
-
-        reqFiles.onsuccess = () => loadedFiles = reqFiles.result || [];
-        reqIndex.onsuccess = () => loadedIndex = reqIndex.result || 0;
-        reqTotal.onsuccess = () => loadedTotal = reqTotal.result || "0";
-
-        transaction.oncomplete = () => {
-            if (loadedFiles.length > 0) {
-                resolve({
-                    files: loadedFiles,
-                    index: loadedIndex,
-                    total: loadedTotal
-                });
-            } else {
-                resolve(null);
-            }
-        };
-        transaction.onerror = (e) => reject(e.target.error);
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const s  = tx.objectStore(STORE_NAME);
+        const r1 = s.get('gifFiles');
+        const r2 = s.get('currentFileIndex');
+        const r3 = s.get('originalTotal');
+        let loadedFiles = [], loadedIndex = 0, loadedTotal = '0';
+        r1.onsuccess = () => loadedFiles = r1.result || [];
+        r2.onsuccess = () => loadedIndex = r2.result || 0;
+        r3.onsuccess = () => loadedTotal = r3.result || '0';
+        tx.oncomplete = () => resolve(loadedFiles.length > 0 ? { files: loadedFiles, index: loadedIndex, total: loadedTotal } : null);
+        tx.onerror    = e  => reject(e.target.error);
     });
 }
 
 function clearSessionState() {
     if (!db) return;
-    const transaction = db.transaction(STORE_NAME, 'readwrite');
-    transaction.objectStore(STORE_NAME).clear();
+    db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME).clear();
 }
 
+// Restore session on load (direct-gif mode only)
 document.addEventListener('DOMContentLoaded', async () => {
     try {
         const session = await loadSessionState();
         if (session && session.files.length > 0) {
-            Swal.fire({
-                title: 'Session Restored',
-                text: 'Your previous progress has been recovered successfully! Please re-select your Save Folder if you were using one.',
-                icon: 'info',
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 5000
-            });
-
-            gifFiles = session.files;
+            Toast.fire({ icon: 'info', title: 'Session Restored! Re-select Save Folder if you used one.' });
+            gifFiles        = session.files;
             currentFileIndex = session.index;
             localStorage.setItem('original_total_gifs', session.total);
-
-            // Resume UI
+            archiveMode      = false;
             currentCropIndex = 1;
-            currentCrops = [];
-            dlCount = 0;
+            currentCrops     = [];
+            dlCount          = 0;
             UI.downloadCount.textContent = '0';
-            UI.downloadLinks.innerHTML = '';
-
+            UI.downloadLinks.innerHTML   = '';
             updateCounters();
             loadCurrentImage();
         }
-    } catch (e) {
-        console.error("Failed to restore session from DB", e);
-    }
+    } catch (e) { console.error('Failed to restore session', e); }
 });
 
-// Sidebar Toggle Logic
-UI.sidebarToggle.addEventListener('click', () => {
-    UI.sidebar.classList.toggle('hidden');
-    if (UI.sidebar.classList.contains('hidden')) {
-        UI.sidebarToggleIcon.classList.remove('fa-chevron-left');
-        UI.sidebarToggleIcon.classList.add('fa-chevron-right');
-    } else {
-        UI.sidebarToggleIcon.classList.remove('fa-chevron-right');
-        UI.sidebarToggleIcon.classList.add('fa-chevron-left');
-    }
-    setTimeout(() => { if (cropper) cropper.resize(); }, 400);
-});
-
-// File System Access Setup
+// ── Output Directory Picker ───────────────────────────────────
 if (UI.selectOutputDirBtn) {
     if ('showDirectoryPicker' in window) {
         UI.selectOutputDirBtn.addEventListener('click', async () => {
             try {
                 outputDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-                // Check permissions
                 if ((await outputDirHandle.queryPermission({ mode: 'readwrite' })) !== 'granted') {
-                    if ((await outputDirHandle.requestPermission({ mode: 'readwrite' })) !== 'granted') {
+                    if ((await outputDirHandle.requestPermission({ mode: 'readwrite' })) !== 'granted')
                         throw new Error('Permission not granted');
-                    }
                 }
                 UI.outputPathDisplay.textContent = `Saving to: ${outputDirHandle.name}`;
-                UI.outputPathDisplay.style.color = 'var(--primary-color)';
+                UI.outputPathDisplay.style.color  = 'var(--primary-color)';
                 Toast.fire({ icon: 'success', title: 'Local save folder connected!' });
             } catch (err) {
-                console.error("Directory picker error:", err);
-                UI.outputPathDisplay.textContent = "Folder selection cancelled or denied";
-                UI.outputPathDisplay.style.color = "var(--accent-r)";
+                console.error('Dir picker error:', err);
+                UI.outputPathDisplay.textContent = 'Folder selection cancelled or denied';
+                UI.outputPathDisplay.style.color  = 'var(--accent-r)';
             }
         });
     } else {
         UI.selectOutputDirBtn.style.display = 'none';
-        UI.outputPathDisplay.textContent = "Your browser does not support automatic local saving. Files will be downloaded normally.";
+        UI.outputPathDisplay.textContent = 'Your browser does not support automatic local saving.';
     }
 }
 
+// ── Crop-Steps UI ─────────────────────────────────────────────
 function initCropStepsUI() {
     UI.cropStepsContainer.innerHTML = '';
     for (let i = 1; i <= 8; i++) {
         const div = document.createElement('div');
-        div.className = `step-box step-${i}`;
+        div.className  = `step-box step-${i}`;
         div.textContent = CROP_LABELS[i];
         UI.cropStepsContainer.appendChild(div);
     }
@@ -227,13 +217,22 @@ initCropStepsUI();
 function updateCropStepsUI() {
     for (let i = 1; i <= 8; i++) {
         const div = document.querySelector(`.step-${i}`);
-        if (div) {
-            div.className = `step-box step-${i}`;
-            if (i < currentCropIndex) {
-                div.classList.add(i <= 4 ? 'completed-r' : 'completed-l');
-            } else if (i === currentCropIndex) {
-                div.classList.add('active');
+        if (!div) continue;
+        div.className = `step-box step-${i}`;
+
+        if (archiveMode) {
+            // Dim steps that have no image in this archive
+            if (!archiveStepMap[i]) {
+                div.classList.add('step-unavailable');
+                continue;
             }
+        }
+
+        if (i < currentCropIndex) {
+            // Steps 1-4 (L1-L4) completed-l (green). Steps 5-8 (R1-R4) completed-r (red)
+            div.classList.add(i <= 4 ? 'completed-l' : 'completed-r');
+        } else if (i === currentCropIndex) {
+            div.classList.add('active');
         }
     }
 
@@ -244,379 +243,495 @@ function updateCropStepsUI() {
     updateUndoButtonState();
 }
 
+// ── File Input Handler ────────────────────────────────────────
 UI.folderInput.addEventListener('change', async (e) => {
     const allFiles = Array.from(e.target.files);
-    let gifs = allFiles.filter(f => f.name.toLowerCase().endsWith('.gif'));
+    const archives = allFiles.filter(f => /\.(zip|rar)$/i.test(f.name));
+    const gifs     = allFiles.filter(f => f.name.toLowerCase().endsWith('.gif'));
 
-    if (gifs.length === 0) {
-        Swal.fire('No GIFs found', 'Please select a folder containing GIF files.', 'warning');
-        return;
+    if (allFiles.length > 0 && allFiles[0].webkitRelativePath) {
+        uploadedFolderName = allFiles[0].webkitRelativePath.split('/')[0];
+    } else {
+        uploadedFolderName = 'Workspace';
     }
 
-    // Auto-skip logic for already processed files
-    let skippedCount = 0;
+    if (archives.length > 0) {
+        // ── ARCHIVE MODE ──
+        archiveMode          = true;
+        archiveFiles         = archives;
+        currentArchiveIndex  = 0;
+        archiveStepMap       = {};
+        currentCropIndex     = 1;
+        currentCrops         = [];
+        dlCount              = 0;
+        UI.downloadCount.textContent = '0';
+        UI.downloadLinks.innerHTML   = '';
+        updateCounters();
+        Toast.fire({ icon: 'info', title: `Loaded ${archives.length} archive(s). Extracting first…` });
+        loadCurrentImage();
 
-    // ALWAYS Check local browser cache history robustly
-    const processedHistory = JSON.parse(localStorage.getItem('processed_gifs_history') || '[]');
-    const historySet = new Set(processedHistory.map(name => name.toLowerCase()));
+    } else if (gifs.length > 0) {
+        // ── DIRECT GIF MODE ──
+        archiveMode = false;
 
-    const processedDirNames = new Set();
-    if (outputDirHandle) {
-        // Read the actual local output folder if connected
-        try {
-            for await (const entry of outputDirHandle.values()) {
-                if (entry.kind === 'file' && (entry.name.toLowerCase().endsWith('.zip') || entry.name.toLowerCase().endsWith('.rar'))) {
-                    const base = entry.name.substring(0, entry.name.lastIndexOf('.')).toLowerCase();
-                    processedDirNames.add(base);
+        const processedHistory = JSON.parse(localStorage.getItem('processed_gifs_history') || '[]');
+        const historySet       = new Set(processedHistory.map(n => n.toLowerCase()));
+        const processedDirNames = new Set();
+
+        if (outputDirHandle) {
+            try {
+                for await (const entry of outputDirHandle.values()) {
+                    if (entry.kind === 'file' && /\.(zip|rar)$/i.test(entry.name)) {
+                        processedDirNames.add(entry.name.replace(/\.[^.]+$/, '').toLowerCase());
+                    }
                 }
+            } catch (err) { console.error('Could not scan output folder', err); }
+        }
+
+        let skippedCount = 0;
+        const filteredGifs = [];
+        for (const file of gifs) {
+            const base = file.name.replace(/\.[^.]+$/, '').toLowerCase();
+            if (historySet.has(file.name.toLowerCase()) || processedDirNames.has(base)) {
+                skippedCount++;
+            } else {
+                filteredGifs.push(file);
             }
-        } catch (err) {
-            console.error("Could not scan output folder", err);
         }
-    }
 
-    const filteredGifs = [];
-    for (const file of gifs) {
-        const baseName = file.name.substring(0, file.name.lastIndexOf('.')).toLowerCase();
+        gifFiles        = filteredGifs;
+        currentFileIndex = 0;
 
-        // Skip if either found in LocalStorage memory OR exists in the output Directory
-        if (historySet.has(file.name.toLowerCase()) || processedDirNames.has(baseName)) {
-            skippedCount++;
-        } else {
-            filteredGifs.push(file);
+        let originalTotal = parseInt(localStorage.getItem('original_total_gifs') || '0');
+        if (skippedCount === 0 || originalTotal === 0 || gifFiles.length + skippedCount > originalTotal) {
+            originalTotal = gifFiles.length + skippedCount;
+            localStorage.setItem('original_total_gifs', originalTotal.toString());
         }
+        saveSessionState();
+
+        if (gifFiles.length === 0 && skippedCount > 0) {
+            Swal.fire('All caught up!', 'All GIFs already processed.', 'success');
+            UI.totalGifs.textContent = 0;
+            UI.completedGifs.textContent = 0;
+            UI.remainingGifs.textContent = 0;
+            return;
+        }
+
+        Toast.fire({ icon: 'success', title: skippedCount > 0 ? `Skipped ${skippedCount} already-processed GIFs.` : `Loaded ${gifFiles.length} GIFs.` });
+
+        currentCropIndex = 1;
+        currentCrops     = [];
+        dlCount          = 0;
+        UI.downloadLinks.innerHTML   = '';
+        UI.downloadCount.textContent = '0';
+        updateCounters();
+        loadCurrentImage();
+
+    } else {
+        Swal.fire('No files found', 'Please select a folder containing GIF files or ZIP/RAR archives.', 'warning');
     }
-
-    gifFiles = filteredGifs;
-
-    // Persist Original Total for UI consistency
-    let originalTotal = parseInt(localStorage.getItem('original_total_gifs') || '0');
-    if (skippedCount === 0 || originalTotal === 0 || gifFiles.length + skippedCount > originalTotal) {
-        originalTotal = gifFiles.length + skippedCount;
-        localStorage.setItem('original_total_gifs', originalTotal.toString());
-    }
-
-    // SAVE TO DATABASE INSTANTLY
-    saveSessionState();
-
-    let toastMsg = `Loaded ${gifFiles.length} GIFs. Ready to crop.`;
-    if (skippedCount > 0) {
-        toastMsg = `Browser Memory Remembers! Skipped ${skippedCount} already processed GIFs.`;
-    }
-
-    if (gifFiles.length === 0 && skippedCount > 0) {
-        Swal.fire('All caught up!', 'All selected GIFs have already been processed.', 'success');
-        UI.totalGifs.textContent = 0;
-        UI.completedGifs.textContent = 0;
-        UI.remainingGifs.textContent = 0;
-        return;
-    }
-
-    Swal.fire({
-        toast: true,
-        position: 'top-end',
-        icon: 'success',
-        title: toastMsg,
-        showConfirmButton: false,
-        timer: 4000
-    });
-
-    currentFileIndex = 0;
-    currentCropIndex = 1;
-    currentCrops = [];
-
-    UI.totalGifs.textContent = originalTotal;
-    UI.completedGifs.textContent = originalTotal - gifFiles.length;
-    UI.remainingGifs.textContent = gifFiles.length;
-    UI.downloadLinks.innerHTML = '';
-    UI.downloadCount.textContent = '0';
-    dlCount = 0;
-
-    loadCurrentImage();
 });
 
-let currentObjectUrl = null;
+// ── Archive Mode: Extract on Server ───────────────────────────
+async function extractAndLoadArchive(file) {
+    UI.currentFileName.innerHTML = `<i class="fas fa-folder-open"></i> ${uploadedFolderName} &nbsp;&raquo;&nbsp; <i class="fas fa-file-archive"></i> ${file.name} (extracting…)`;
+    UI.btnCrop.disabled = true;
+    UI.btnSkip.disabled = true;
 
+    const formData = new FormData();
+    formData.append('archive', file);
+
+    try {
+        const resp = await fetch('/api/extract', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Extraction failed');
+
+        archiveBaseName = data.baseName;
+
+        // Map files to steps
+        const files = data.files;
+        archiveStepMap = {};
+
+        const findFile = (searchStr) => {
+            return files.find(f => f.filename.toLowerCase().includes(searchStr.toLowerCase()));
+        };
+
+        const fileL1 = findFile('l1');
+        const fileL2 = findFile('l2');
+        const fileR1 = findFile('r1');
+        const fileR2 = findFile('r2');
+
+        // Association Logic:
+        // L1 uses L1.gif (Step 1)
+        // L2, L3, L4 use L2.gif (Steps 2, 3, 4)
+        // R1 uses R1.gif (Step 5)
+        // R2, R3, R4 use R2.gif (Steps 6, 7, 8)
+        archiveStepMap[1] = fileL1;
+        archiveStepMap[2] = fileL2;
+        archiveStepMap[3] = fileL2;
+        archiveStepMap[4] = fileL2;
+        archiveStepMap[5] = fileR1;
+        archiveStepMap[6] = fileR2;
+        archiveStepMap[7] = fileR2;
+        archiveStepMap[8] = fileR2;
+
+        // Fallback for sequential files if named differently
+        if (!fileL1 && !fileL2 && !fileR1 && !fileR2) {
+            archiveStepMap[1] = files[0] || null;
+            archiveStepMap[2] = files[1] || null;
+            archiveStepMap[3] = files[1] || null;
+            archiveStepMap[4] = files[1] || null;
+            archiveStepMap[5] = files[2] || null;
+            archiveStepMap[6] = files[3] || null;
+            archiveStepMap[7] = files[3] || null;
+            archiveStepMap[8] = files[3] || null;
+        }
+
+        const firstStep = findNextStep(1);
+        if (firstStep === null) {
+            Swal.fire('Empty Archive', 'No compatible image files found inside this archive.', 'warning');
+            currentArchiveIndex++;
+            archiveStepMap = {};
+            loadCurrentImage();
+            return;
+        }
+
+        currentCropIndex = firstStep;
+        currentCrops     = [];
+        UI.lastCropContainer.style.display = 'none';
+        loadCurrentImage();
+
+    } catch (err) {
+        Swal.fire('Extraction Error', err.message, 'error');
+        UI.btnSkip.disabled = false;
+    }
+}
+
+// Find next step index >= startFrom that has an image
+function findNextStep(startFrom) {
+    for (let i = startFrom; i <= 8; i++) {
+        if (!archiveMode || archiveStepMap[i]) return i;
+    }
+    return null;
+}
+
+// ── Helper to update top header and status counters ───────────
+function updateUIForCurrentImage(file, stepEntry) {
+    if (archiveMode) {
+        const innerFileName = stepEntry ? stepEntry.filename : '';
+        UI.currentFileName.innerHTML = `<i class="fas fa-folder-open"></i> ${uploadedFolderName} &nbsp;&raquo;&nbsp; <i class="fas fa-file-archive"></i> ${file.name} &nbsp;&raquo;&nbsp; <span style="color: var(--primary-color); font-weight: 600;">${innerFileName}</span>`;
+    } else {
+        UI.currentFileName.innerHTML = `<i class="fas fa-folder-open"></i> ${uploadedFolderName} &nbsp;&raquo;&nbsp; <i class="fas fa-file-image"></i> ${file.name}`;
+    }
+    UI.btnCrop.disabled = false;
+    UI.btnSkip.disabled = false;
+    updateCropStepsUI();
+}
+
+// ── Load Current Image ────────────────────────────────────────
 function loadCurrentImage() {
-    if (currentFileIndex >= gifFiles.length) {
-        Swal.fire({
-            title: 'All Done!',
-            text: 'You have successfully processed all GIF files.',
-            icon: 'success'
-        });
-        UI.currentFileName.textContent = "All files processed!";
-        cleanupCropper();
-        UI.image.style.display = 'none';
-        UI.placeholder.style.display = 'block';
-        UI.placeholder.innerHTML = '<i class="fas fa-check-circle fa-4x mb-3 text-success" style="color:#7ee787;"></i><h2 class="mt-3">All files processed.</h2>';
-        UI.btnCrop.disabled = true;
-        UI.btnSkip.disabled = true;
+    let targetSrc = null;
+    let stepEntry = null;
+    let file = null;
 
-        // Clean session memory since job is done!
-        clearSessionState();
-        localStorage.removeItem('original_total_gifs');
+    if (archiveMode) {
+        if (currentArchiveIndex >= archiveFiles.length) {
+            cleanupCropper();
+            Swal.fire('All Done!', 'All archives have been processed.', 'success');
+            UI.currentFileName.textContent = 'All archives processed!';
+            UI.placeholder.style.display   = 'block';
+            UI.image.style.display         = 'none';
+            UI.btnCrop.disabled            = true;
+            UI.btnSkip.disabled            = true;
+            clearSessionState();
+            return;
+        }
 
+        file = archiveFiles[currentArchiveIndex];
+        
+        if (!archiveStepMap || Object.keys(archiveStepMap).length === 0) {
+            extractAndLoadArchive(file);
+            return;
+        }
+
+        stepEntry = archiveStepMap[currentCropIndex];
+        if (!stepEntry) {
+            const nextStep = findNextStep(currentCropIndex + 1);
+            if (nextStep !== null) {
+                currentCropIndex = nextStep;
+                loadCurrentImage();
+            } else {
+                finalizeArchive();
+            }
+            return;
+        }
+        targetSrc = stepEntry.url;
+
+    } else {
+        if (currentFileIndex >= gifFiles.length) {
+            cleanupCropper();
+            Swal.fire('All Done!', 'All GIF files have been processed.', 'success');
+            UI.currentFileName.textContent = 'All files processed!';
+            UI.placeholder.style.display   = 'block';
+            UI.image.style.display         = 'none';
+            UI.btnCrop.disabled            = true;
+            UI.btnSkip.disabled            = true;
+            clearSessionState();
+            localStorage.removeItem('original_total_gifs');
+            return;
+        }
+
+        file = gifFiles[currentFileIndex];
+        targetSrc = 'file_' + currentFileIndex;
+    }
+
+    // Check if the image source is the same and cropper is already active
+    if (cropper && currentLoadedImageSrc === targetSrc) {
+        updateUIForCurrentImage(file, stepEntry);
+        // Keep the zoom level, pan position, and crop box size/position intact!
         return;
     }
 
-    const file = gifFiles[currentFileIndex];
-    UI.currentFileName.innerHTML = `<i class="fas fa-file-image"></i> ${file.name}`;
-    currentCropIndex = 1;
-    currentCrops = []; // reset crops for new file
-    updateCropStepsUI();
+    // Image changed! Recreate cropper
+    cleanupCropper();
+    currentLoadedImageSrc = targetSrc;
 
-    UI.placeholder.style.display = 'none';
-    UI.image.style.display = 'block';
+    updateUIForCurrentImage(file, stepEntry);
 
-    if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-    currentObjectUrl = URL.createObjectURL(file);
-    UI.image.src = currentObjectUrl;
+    if (archiveMode) {
+        UI.placeholder.style.display = 'none';
+        UI.image.style.display       = 'block';
+        UI.image.src                 = stepEntry.url + '?t=' + Date.now();
+    } else {
+        UI.placeholder.style.display = 'none';
+        UI.image.style.display       = 'block';
 
-    UI.btnCrop.disabled = false;
-    UI.btnSkip.disabled = false;
-    updateUndoButtonState();
-
-    if (cropper) {
-        cropper.destroy();
+        if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+        currentObjectUrl = URL.createObjectURL(file);
+        UI.image.src     = currentObjectUrl;
     }
 
     UI.image.onload = () => {
+        // Prevent race condition if target changes before onload fires
+        if (currentLoadedImageSrc !== targetSrc) return;
+
         cropper = new Cropper(UI.image, {
-            viewMode: 1,
-            dragMode: 'crop',
-            responsive: true,
-            restore: false,
-            guides: true,
-            center: true,
-            highlight: false,
-            cropBoxMovable: true,
-            cropBoxResizable: true,
+            viewMode:              1,
+            dragMode:              'crop',
+            responsive:            true,
+            restore:               false,
+            guides:                true,
+            center:                true,
+            highlight:             false,
+            cropBoxMovable:        true,
+            cropBoxResizable:      true,
             toggleDragModeOnDblclick: false,
-            background: false,
-            autoCropArea: 0.3
+            background:            false,
+            autoCropArea:          0.3
         });
     };
 }
 
+// ── Cleanup ───────────────────────────────────────────────────
 function cleanupCropper() {
-    if (cropper) {
-        cropper.destroy();
-        cropper = null;
-    }
-    if (currentObjectUrl) {
-        URL.revokeObjectURL(currentObjectUrl);
-        currentObjectUrl = null;
-    }
+    if (cropper) { cropper.destroy(); cropper = null; }
+    if (currentObjectUrl) { URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
+    currentLoadedImageSrc = null;
 }
 
+// ── Skip Button ───────────────────────────────────────────────
 UI.btnSkip.addEventListener('click', () => {
-    currentFileIndex++;
-    saveSessionState(); // Update Index in DB
-    updateCounters();
-    loadCurrentImage();
+    if (archiveMode) {
+        currentArchiveIndex++;
+        archiveStepMap   = {};
+        currentCropIndex = 1;
+        currentCrops     = [];
+        updateCounters();
+        loadCurrentImage();
+    } else {
+        currentFileIndex++;
+        currentCropIndex = 1;
+        currentCrops     = [];
+        saveSessionState();
+        updateCounters();
+        loadCurrentImage();
+    }
 });
 
-// Undo function
+// ── Undo Button ───────────────────────────────────────────────
 UI.btnUndo.addEventListener('click', () => {
-    if (currentCropIndex <= 1 || currentCropIndex > 8) return;
-
-    const targetCropUndo = currentCropIndex - 1;
+    if (currentCrops.length === 0) return;
     UI.btnUndo.disabled = true;
 
-    // Remove from local memory Array
     currentCrops.pop();
 
-    Toast.fire({ icon: 'info', title: `Undid Crop ${CROP_LABELS[targetCropUndo]}` });
-    currentCropIndex--;
-    updateCropStepsUI();
+    let prevStep = currentCropIndex - 1;
+    while (prevStep >= 1 && archiveMode && !archiveStepMap[prevStep]) {
+        prevStep--;
+    }
 
-    // Refresh last crop preview if we still have crops
+    if (prevStep < 1) {
+        prevStep = findNextStep(1) || 1;
+    }
+
+    currentCropIndex = prevStep;
+    Toast.fire({ icon: 'info', title: `Undid Crop to ${CROP_LABELS[currentCropIndex]}` });
+
     if (currentCrops.length > 0) {
-        const lastBlob = currentCrops[currentCrops.length - 1].blob;
-        UI.lastCropImg.src = URL.createObjectURL(lastBlob);
+        UI.lastCropImg.src = URL.createObjectURL(currentCrops[currentCrops.length - 1].blob);
         UI.lastCropContainer.style.display = 'block';
     } else {
         UI.lastCropContainer.style.display = 'none';
     }
 
-    updateUndoButtonState();
+    loadCurrentImage();
 });
 
 function updateUndoButtonState() {
-    UI.btnUndo.disabled = (currentCropIndex <= 1 || currentCropIndex > 8);
+    UI.btnUndo.disabled = (currentCrops.length === 0);
 }
 
-// Ensure the crop coordinates extract a clear image
-function getCroppedCanvas(cropperInstance) {
-    return cropperInstance.getCroppedCanvas({
-        imageSmoothingEnabled: true,
-        imageSmoothingQuality: 'high',
-    });
+// ── Crop Helpers ──────────────────────────────────────────────
+function getCroppedCanvas(c) {
+    return c.getCroppedCanvas({ imageSmoothingEnabled: true, imageSmoothingQuality: 'high' });
 }
 
 function canvasToBlob(canvas) {
     return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
+// ── Perform Crop ──────────────────────────────────────────────
 async function performCrop() {
     if (!cropper) return;
-    if (currentFileIndex >= gifFiles.length) return;
 
     UI.btnCrop.disabled = true;
 
     try {
-        const file = gifFiles[currentFileIndex];
-        const baseName = file.name.substring(0, file.name.lastIndexOf('.'));
-        const suffix = CROP_SUFFIXES[currentCropIndex];
-        const cropFilename = `${baseName}${suffix}.png`;
+        const label        = CROP_LABELS[currentCropIndex];
+        const baseName     = archiveMode ? archiveBaseName : gifFiles[currentFileIndex].name.replace(/\.[^.]+$/, '');
+        const cropFilename = `${baseName}${label}.png`;
 
-        // Extract PNG blob purely in Browser Memory
         const canvas = getCroppedCanvas(cropper);
-        const blob = await canvasToBlob(canvas);
+        const blob   = await canvasToBlob(canvas);
 
-        currentCrops.push({
-            filename: cropFilename,
-            blob: blob
-        });
+        currentCrops.push({ filename: cropFilename, blob });
 
-        Toast.fire({
-            icon: 'success',
-            title: `Saved Crop ${CROP_LABELS[currentCropIndex]} locally!`,
-            position: 'top-end'
-        });
+        Toast.fire({ icon: 'success', title: `Saved ${CROP_LABELS[currentCropIndex]}` });
 
-        // Last Crop UX Update
-        if (currentCropIndex !== 8) {
+        if (UI.lastCropImg) {
             UI.lastCropImg.src = URL.createObjectURL(blob);
             UI.lastCropContainer.style.display = 'block';
-        } else {
-            UI.lastCropContainer.style.display = 'none';
+        }
 
-            // Reached 8th crop -> Archive them all immediately
-            await createAndSaveArchive(baseName, file.name);
+        const nextStep = findNextStep(currentCropIndex + 1);
 
-            currentFileIndex++;
-            saveSessionState(); // Update DB after successful full process!
-
-            updateCounters();
+        if (nextStep !== null) {
+            currentCropIndex = nextStep;
             loadCurrentImage();
+        } else {
+            await finalizeArchive();
         }
 
-        if (currentCropIndex <= 8) {
-            currentCropIndex++;
-            updateCropStepsUI();
-        }
-
-    } catch (e) {
-        console.error("Local Crop Error:", e);
-        Swal.fire('Error', 'Failed to generate image crop: ' + e.message, 'error');
+    } catch (err) {
+        console.error('Crop error:', err);
+        Swal.fire('Error', 'Failed to crop: ' + err.message, 'error');
     }
 
     UI.btnCrop.disabled = false;
     updateUndoButtonState();
 }
 
+// ── Finalize Current Archive ──────────────────────────────────
+async function finalizeArchive() {
+    const baseName     = archiveMode ? archiveBaseName : gifFiles[currentFileIndex].name.replace(/\.[^.]+$/, '');
+    const originalName = archiveMode ? archiveFiles[currentArchiveIndex].name : gifFiles[currentFileIndex].name;
+
+    UI.lastCropContainer.style.display = 'none';
+    await createAndSaveArchive(baseName, originalName);
+
+    if (archiveMode) {
+        currentArchiveIndex++;
+        archiveStepMap   = {};
+        currentCropIndex = 1;
+        currentCrops     = [];
+        updateCounters();
+        loadCurrentImage();
+    } else {
+        currentFileIndex++;
+        currentCropIndex = 1;
+        currentCrops     = [];
+        saveSessionState();
+        updateCounters();
+        loadCurrentImage();
+    }
+}
+
+// ── Package & Save Archive ────────────────────────────────────
 async function createAndSaveArchive(baseName, originalFileName) {
-    Swal.fire({
-        title: 'Packaging ZIP locally...',
-        text: 'Generating archive in browser memory instantly.',
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading()
-    });
+    Swal.fire({ title: 'Packaging ZIP…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
         const zip = new JSZip();
-        // Add all crops to zip
-        for (const crop of currentCrops) {
-            zip.file(crop.filename, crop.blob);
-        }
-
-        const zipBlob = await zip.generateAsync({ type: "blob" });
-        const zipName = `${baseName}.zip`; // using .zip natively 
+        for (const crop of currentCrops) zip.file(crop.filename, crop.blob);
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const zipName = `${baseName}.zip`;
 
         let pathMsg = '';
 
         if (outputDirHandle) {
-            // Save directly to user's selected PC folder using File System API
-            const fileHandle = await outputDirHandle.getFileHandle(zipName, { create: true });
-            const writable = await fileHandle.createWritable();
+            const fh  = await outputDirHandle.getFileHandle(zipName, { create: true });
+            const writable = await fh.createWritable();
             await writable.write(zipBlob);
             await writable.close();
-            pathMsg = `Saved seamlessly to: ${outputDirHandle.name}/${zipName}`;
+            pathMsg = `Saved to: ${outputDirHandle.name}/${zipName}`;
         } else {
-            // Fallback: standard web download
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(zipBlob);
-            // By prepending 'done/', supported browsers will create/use a folder named "done" inside the default Downloads directory
+            const link = document.createElement('a');
+            link.href     = URL.createObjectURL(zipBlob);
             link.download = `done/${zipName}`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            pathMsg = 'Downloaded to your "Downloads/done" folder.';
+            pathMsg = 'Downloaded to Downloads/done folder.';
         }
 
-        addDownloadLinkHtml(zipName, outputDirHandle ? true : false);
+        addDownloadLinkHtml(zipName, !!outputDirHandle);
 
-        // Save to LocalStorage History permanently
-        const processedHistory = JSON.parse(localStorage.getItem('processed_gifs_history') || '[]');
-        if (originalFileName && !processedHistory.includes(originalFileName)) {
-            processedHistory.push(originalFileName);
-            localStorage.setItem('processed_gifs_history', JSON.stringify(processedHistory));
+        if (originalFileName) {
+            const history = JSON.parse(localStorage.getItem('processed_gifs_history') || '[]');
+            if (!history.includes(originalFileName)) {
+                history.push(originalFileName);
+                localStorage.setItem('processed_gifs_history', JSON.stringify(history));
+            }
         }
 
-        Swal.fire({
-            toast: true,
-            position: 'top-end',
-            icon: 'success',
-            title: pathMsg,
-            showConfirmButton: false,
-            timer: 4000
-        });
+        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: pathMsg, showConfirmButton: false, timer: 4000 });
 
     } catch (err) {
-        console.error("Zip generation error: ", err);
-        Swal.fire('Error', 'Could not create Zip archive locally.', 'error');
+        console.error('Zip error:', err);
+        Swal.fire('Error', 'Could not create ZIP archive.', 'error');
     }
 }
 
-let dlCount = 0;
 function addDownloadLinkHtml(filename, wasSavedDirectly) {
-    const a = document.createElement('div'); // Just a visual record now
-    a.className = 'download-link';
-    a.innerHTML = `<i class="fas ${wasSavedDirectly ? 'fa-folder-check' : 'fa-file-archive'}" style="color:${wasSavedDirectly ? '#7ee787' : '#ffd700'};"></i> ${filename} ${wasSavedDirectly ? '(Saved to PC)' : ''}`;
-
-    UI.downloadLinks.appendChild(a);
+    const div = document.createElement('div');
+    div.className = 'download-link';
+    div.innerHTML = `<i class="fas ${wasSavedDirectly ? 'fa-folder-check' : 'fa-file-archive'}" style="color:${wasSavedDirectly ? '#7ee787' : '#ffd700'};"></i> ${filename} ${wasSavedDirectly ? '(Saved to PC)' : ''}`;
+    UI.downloadLinks.appendChild(div);
     dlCount++;
     UI.downloadCount.textContent = dlCount;
 }
 
+// ── Crop Button / Keypresses ──────────────────────────────────
 UI.btnCrop.addEventListener('click', performCrop);
 
-document.addEventListener('keydown', (e) => {
+document.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !UI.btnCrop.disabled && cropper) {
         e.preventDefault();
         performCrop();
     }
 });
 
-let lastTap = 0;
-document.addEventListener('touchend', (e) => {
-    if (window.innerWidth <= 768) {  // Mobile device check logic
-        const currentTime = new Date().getTime();
-        const tapLength = currentTime - lastTap;
-        if (tapLength < 500 && tapLength > 0) {
-            if (cropper && !UI.btnCrop.disabled) {
-                if (e.target.closest('.cropper-container') || e.target.closest('#image')) {
-                    e.preventDefault();
-                    performCrop();
-                }
-            }
-        }
-        lastTap = currentTime;
-    }
-});
-// For PC double click
-document.addEventListener('dblclick', (e) => {
+document.addEventListener('dblclick', e => {
     if (cropper && !UI.btnCrop.disabled) {
         if (e.target.closest('.cropper-container') || e.target.closest('#image')) {
             e.preventDefault();
@@ -625,54 +740,63 @@ document.addEventListener('dblclick', (e) => {
     }
 });
 
-function updateCounters() {
-    const originalTotal = parseInt(localStorage.getItem('original_total_gifs') || gifFiles.length);
-    const completedAllTotal = originalTotal - gifFiles.length + currentFileIndex;
-
-    UI.completedGifs.textContent = completedAllTotal;
-    UI.remainingGifs.textContent = originalTotal - completedAllTotal;
-}
-
-UI.btnFinalize.addEventListener('click', () => {
-    // With local saving, Master Archiving might not be simple since we don't store 120 big zips in RAM simultaneously to avoid crashing the browser.
-    Swal.fire('Information', 'Since you are running locally directly from Browser to Disk, Master Archive packing is not required! All your individual zips are already on your computer.', 'info');
+let lastTap = 0;
+document.addEventListener('touchend', e => {
+    if (window.innerWidth <= 768) {
+        const now = Date.now();
+        if (now - lastTap < 500 && now - lastTap > 0) {
+            if (cropper && !UI.btnCrop.disabled) {
+                if (e.target.closest('.cropper-container') || e.target.closest('#image')) {
+                    e.preventDefault();
+                    performCrop();
+                }
+            }
+        }
+        lastTap = now;
+    }
 });
 
+// ── Finalize Button ───────────────────────────────────────────
+UI.btnFinalize.addEventListener('click', () => {
+    Swal.fire('Information', 'Since you are running locally, Master Archive packing is not required. All individual ZIPs are already on your computer.', 'info');
+});
+
+// ── Reset Button ──────────────────────────────────────────────
 if (UI.resetAppBtn) {
     UI.resetAppBtn.addEventListener('click', () => {
         Swal.fire({
             title: 'Are you sure?',
-            text: "This will completely reset the software! All your saved progress, skips, and loaded memory will be cleared.",
+            text: 'This will reset all progress and memory.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#ef4444',
-            cancelButtonColor: '#3085d6',
-            confirmButtonText: 'Yes, reset everything!'
-        }).then((result) => {
+            confirmButtonColor: '#3085d6',
+            confirmButtonText: 'Yes, reset!'
+        }).then(result => {
             if (result.isConfirmed) {
-                // Clear all states
                 clearSessionState();
                 localStorage.removeItem('processed_gifs_history');
                 localStorage.removeItem('original_total_gifs');
-
-                Swal.fire({
-                    title: 'Resetting!',
-                    text: 'Bringing everything back to factory state...',
-                    icon: 'success',
-                    showConfirmButton: false,
-                    timer: 1500
-                }).then(() => {
-                    window.location.reload();
-                });
+                Swal.fire({ title: 'Resetting!', icon: 'success', showConfirmButton: false, timer: 1500 })
+                    .then(() => window.location.reload());
             }
         });
     });
 }
 
-const Toast = Swal.mixin({
-    toast: true,
-    position: 'top-end',
-    showConfirmButton: false,
-    timer: 2000,
-    timerProgressBar: true
-});
+// ── Counters ──────────────────────────────────────────────────
+function updateCounters() {
+    if (archiveMode) {
+        const total = archiveFiles.length;
+        const completed = currentArchiveIndex;
+        UI.completedGifs.textContent = completed;
+        UI.remainingGifs.textContent = total - completed;
+        UI.totalGifs.textContent = total;
+    } else {
+        const total     = parseInt(localStorage.getItem('original_total_gifs') || gifFiles.length);
+        const completed = total - gifFiles.length + currentFileIndex;
+        UI.completedGifs.textContent = completed;
+        UI.remainingGifs.textContent = total - completed;
+        UI.totalGifs.textContent = total;
+    }
+}

@@ -211,6 +211,13 @@ input[type="file"] {
     color: #111;
 }
 
+.step-box.step-unavailable {
+    opacity: 0.25;
+    cursor: not-allowed;
+    background: var(--border-color);
+    color: var(--text-muted);
+}
+
 .crop-target-name {
     margin-top: 15px;
     text-align: center;
@@ -389,10 +396,14 @@ input[type="file"] {
     position: relative;
 }
 
-/* Cropper custom adjustments for max visibility */
-.cropper-container {
-    width: 100% !important;
-    height: 100% !important;
+/* Optimize image rendering quality in workspace */
+#image,
+.cropper-container img,
+.cropper-canvas img,
+.cropper-view-box img {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: auto;
+    backface-visibility: hidden;
 }
 
 .cropper-view-box,
@@ -555,4 +566,25 @@ input[type="file"] {
         font-size: 0.7rem;
         padding: 6px 0;
     }
+}
+
+/* Thin cropper cursor styling */
+.cropper-line {
+    background-color: var(--primary-color) !important;
+    height: 1px !important;
+    width: 1px !important;
+}
+.cropper-dashed {
+    border-color: #ffffff !important;
+    border-width: 0.5px !important;
+    opacity: 0.4 !important;
+}
+.cropper-view-box {
+    outline: 1px solid var(--primary-color) !important;
+}
+.cropper-point {
+    background-color: var(--primary-color) !important;
+    width: 6px !important;
+    height: 6px !important;
+    opacity: 0.9 !important;
 }
