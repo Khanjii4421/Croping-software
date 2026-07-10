@@ -501,7 +501,7 @@ function loadCurrentImage() {
     if (archiveMode) {
         UI.placeholder.style.display = 'none';
         UI.image.style.display       = 'block';
-        UI.image.src                 = stepEntry.url + '?t=' + Date.now();
+        UI.image.src                 = stepEntry.url;
     } else {
         UI.placeholder.style.display = 'none';
         UI.image.style.display       = 'block';

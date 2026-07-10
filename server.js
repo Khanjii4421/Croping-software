@@ -103,12 +103,26 @@ app.post('/api/extract', upload.single('archive'), async (req, res) => {
         if (files.length === 0)
             return res.status(400).json({ error: 'No image files found inside the archive.' });
 
+        const fileList = files.map(filename => {
+            const filePath = path.join(destDir, filename);
+            const fileBuf = fs.readFileSync(filePath);
+            const extname = path.extname(filename).toLowerCase();
+            let mimeType = 'image/png';
+            if (extname === '.gif') mimeType = 'image/gif';
+            else if (extname === '.jpg' || extname === '.jpeg') mimeType = 'image/jpeg';
+            else if (extname === '.webp') mimeType = 'image/webp';
+            else if (extname === '.bmp') mimeType = 'image/bmp';
+
+            const base64Data = fileBuf.toString('base64');
+            return {
+                url: `data:${mimeType};base64,${base64Data}`,
+                filename
+            };
+        });
+
         res.json({
             baseName,
-            files: files.map(filename => ({
-                url:      `/extracted/${baseName}/${encodeURIComponent(filename)}`,
-                filename
-            }))
+            files: fileList
         });
 
     } catch (err) {
