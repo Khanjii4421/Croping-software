@@ -68,7 +68,19 @@ app.post('/api/extract', upload.single('archive'), async (req, res) => {
 
         } else if (ext === '.rar') {
             const buf = Uint8Array.from(fs.readFileSync(archivePath)).buffer;
-            const extractor = await createExtractorFromData({ data: buf });
+
+            // Load WASM binary manually to ensure it is bundled and loaded correctly on serverless/Vercel environments
+            let wasmBinary = undefined;
+            try {
+                const wasmPath = path.join(process.cwd(), 'node_modules', 'node-unrar-js', 'dist', 'js', 'unrar.wasm');
+                if (fs.existsSync(wasmPath)) {
+                    wasmBinary = fs.readFileSync(wasmPath);
+                }
+            } catch (wasmErr) {
+                console.error('[extract] Failed to read unrar.wasm manually:', wasmErr);
+            }
+
+            const extractor = await createExtractorFromData({ data: buf, wasmBinary });
             const extracted = extractor.extract();
             for (const file of extracted.files) {
                 if (file.fileHeader.flags.directory || !file.extraction) continue;

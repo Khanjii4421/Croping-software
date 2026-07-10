@@ -1,5 +1,10 @@
 {
     "version": 2,
+    "functions": {
+        "server.js": {
+            "includeFiles": "node_modules/node-unrar-js/dist/js/unrar.wasm"
+        }
+    },
     "rewrites": [
         {
             "source": "/(.*)",
