@@ -60,7 +60,8 @@ const UI = {
     lastCropImg:        document.getElementById('lastCropImg'),
     selectOutputDirBtn: document.getElementById('selectOutputDirBtn'),
     outputPathDisplay:  document.getElementById('outputPathDisplay'),
-    resetAppBtn:        document.getElementById('resetAppBtn')
+    resetAppBtn:        document.getElementById('resetAppBtn'),
+    oldMethodCheckbox:  document.getElementById('oldMethodCheckbox')
 };
 
 // ── Toast Helper ──────────────────────────────────────────────
@@ -202,6 +203,28 @@ if (UI.selectOutputDirBtn) {
     }
 }
 
+// ── Old Method Checkbox Toggle ────────────────────────────────
+if (UI.oldMethodCheckbox) {
+    UI.oldMethodCheckbox.addEventListener('change', () => {
+        const isOldMethod = UI.oldMethodCheckbox.checked;
+        const uploadLabel = document.querySelector('label[for="folderInput"]');
+        if (isOldMethod) {
+            UI.folderInput.removeAttribute('webkitdirectory');
+            UI.folderInput.removeAttribute('directory');
+            if (uploadLabel) {
+                uploadLabel.innerHTML = '<i class="fas fa-file-upload"></i> Upload Files';
+            }
+        } else {
+            UI.folderInput.setAttribute('webkitdirectory', '');
+            UI.folderInput.setAttribute('directory', '');
+            if (uploadLabel) {
+                uploadLabel.innerHTML = '<i class="fas fa-folder-open"></i> Upload Folder';
+            }
+        }
+        UI.folderInput.value = '';
+    });
+}
+
 // ── Crop-Steps UI ─────────────────────────────────────────────
 function initCropStepsUI() {
     UI.cropStepsContainer.innerHTML = '';
@@ -246,16 +269,20 @@ function updateCropStepsUI() {
 // ── File Input Handler ────────────────────────────────────────
 UI.folderInput.addEventListener('change', async (e) => {
     const allFiles = Array.from(e.target.files);
+    const isOldMethod = UI.oldMethodCheckbox && UI.oldMethodCheckbox.checked;
+    
     const archives = allFiles.filter(f => /\.(zip|rar)$/i.test(f.name));
-    const gifs     = allFiles.filter(f => f.name.toLowerCase().endsWith('.gif'));
+    const validImages = isOldMethod 
+        ? allFiles.filter(f => /\.(gif|png|jpe?g|webp|bmp)$/i.test(f.name))
+        : allFiles.filter(f => f.name.toLowerCase().endsWith('.gif'));
 
     if (allFiles.length > 0 && allFiles[0].webkitRelativePath) {
         uploadedFolderName = allFiles[0].webkitRelativePath.split('/')[0];
     } else {
-        uploadedFolderName = 'Workspace';
+        uploadedFolderName = isOldMethod ? 'Selected Files' : 'Workspace';
     }
 
-    if (archives.length > 0) {
+    if (archives.length > 0 && !isOldMethod) {
         // ── ARCHIVE MODE ──
         archiveMode          = true;
         archiveFiles         = archives;
@@ -270,7 +297,7 @@ UI.folderInput.addEventListener('change', async (e) => {
         Toast.fire({ icon: 'info', title: `Loaded ${archives.length} archive(s). Extracting first…` });
         loadCurrentImage();
 
-    } else if (gifs.length > 0) {
+    } else if (validImages.length > 0) {
         // ── DIRECT GIF MODE ──
         archiveMode = false;
 
@@ -290,7 +317,7 @@ UI.folderInput.addEventListener('change', async (e) => {
 
         let skippedCount = 0;
         const filteredGifs = [];
-        for (const file of gifs) {
+        for (const file of validImages) {
             const base = file.name.replace(/\.[^.]+$/, '').toLowerCase();
             if (historySet.has(file.name.toLowerCase()) || processedDirNames.has(base)) {
                 skippedCount++;
@@ -310,14 +337,14 @@ UI.folderInput.addEventListener('change', async (e) => {
         saveSessionState();
 
         if (gifFiles.length === 0 && skippedCount > 0) {
-            Swal.fire('All caught up!', 'All GIFs already processed.', 'success');
+            Swal.fire('All caught up!', 'All files already processed.', 'success');
             UI.totalGifs.textContent = 0;
             UI.completedGifs.textContent = 0;
             UI.remainingGifs.textContent = 0;
             return;
         }
 
-        Toast.fire({ icon: 'success', title: skippedCount > 0 ? `Skipped ${skippedCount} already-processed GIFs.` : `Loaded ${gifFiles.length} GIFs.` });
+        Toast.fire({ icon: 'success', title: skippedCount > 0 ? `Skipped ${skippedCount} already-processed files.` : `Loaded ${gifFiles.length} files.` });
 
         currentCropIndex = 1;
         currentCrops     = [];
@@ -328,7 +355,7 @@ UI.folderInput.addEventListener('change', async (e) => {
         loadCurrentImage();
 
     } else {
-        Swal.fire('No files found', 'Please select a folder containing GIF files or ZIP/RAR archives.', 'warning');
+        Swal.fire('No files found', isOldMethod ? 'Please select valid image files.' : 'Please select a folder containing GIF files or ZIP/RAR archives.', 'warning');
     }
 });
 
@@ -668,13 +695,18 @@ async function finalizeArchive() {
 
 // ── Package & Save Archive ────────────────────────────────────
 async function createAndSaveArchive(baseName, originalFileName) {
-    Swal.fire({ title: 'Packaging ZIP…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const isOldMethod = UI.oldMethodCheckbox && UI.oldMethodCheckbox.checked;
+    Swal.fire({ 
+        title: isOldMethod ? 'Packaging RAR…' : 'Packaging ZIP…', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
 
     try {
         const zip = new JSZip();
         for (const crop of currentCrops) zip.file(crop.filename, crop.blob);
         const zipBlob = await zip.generateAsync({ type: 'blob' });
-        const zipName = `${baseName}.zip`;
+        const zipName = isOldMethod ? `${baseName}.rar` : `${baseName}.zip`;
 
         let pathMsg = '';
 
@@ -687,11 +719,11 @@ async function createAndSaveArchive(baseName, originalFileName) {
         } else {
             const link = document.createElement('a');
             link.href     = URL.createObjectURL(zipBlob);
-            link.download = `done/${zipName}`;
+            link.download = isOldMethod ? zipName : `done/${zipName}`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            pathMsg = 'Downloaded to Downloads/done folder.';
+            pathMsg = isOldMethod ? `Downloaded ${zipName}` : 'Downloaded to Downloads/done folder.';
         }
 
         addDownloadLinkHtml(zipName, !!outputDirHandle);
@@ -707,8 +739,8 @@ async function createAndSaveArchive(baseName, originalFileName) {
         Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: pathMsg, showConfirmButton: false, timer: 4000 });
 
     } catch (err) {
-        console.error('Zip error:', err);
-        Swal.fire('Error', 'Could not create ZIP archive.', 'error');
+        console.error('Zip/Rar error:', err);
+        Swal.fire('Error', isOldMethod ? 'Could not create RAR archive.' : 'Could not create ZIP archive.', 'error');
     }
 }
 

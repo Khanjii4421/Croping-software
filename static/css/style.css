@@ -790,3 +790,19 @@ body.light-theme .bg-glow-3 {
     height: 6px !important;
     opacity: 0.9 !important;
 }
+
+/* Custom Checkbox Style for Old Method */
+#oldMethodCheckbox:checked + .checkbox-label .custom-checkbox {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.4);
+}
+
+#oldMethodCheckbox:checked + .checkbox-label .custom-checkbox i {
+    color: #ffffff !important;
+}
+
+.checkbox-label:hover .custom-checkbox {
+    border-color: var(--primary-hover);
+    transform: scale(1.05);
+}

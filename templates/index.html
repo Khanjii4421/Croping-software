@@ -44,6 +44,17 @@
             </div>
 
             <div class="upload-section">
+                <!-- Old Method Checkbox -->
+                <div style="margin-bottom: 12px; display: flex; align-items: center; gap: 10px; padding: 10px; background: var(--card-bg); border: 1px solid var(--panel-border); border-radius: 8px;">
+                    <input type="checkbox" id="oldMethodCheckbox" style="display: none;" />
+                    <label for="oldMethodCheckbox" class="checkbox-label" style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 0.9rem; font-weight: 500; user-select: none;">
+                        <span class="custom-checkbox" style="width: 18px; height: 18px; border: 2px solid var(--primary-color); border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s;">
+                            <i class="fas fa-check" style="font-size: 0.7rem; color: transparent; transition: all 0.2s;"></i>
+                        </span>
+                        Old Method
+                    </label>
+                </div>
+
                 <!-- Folder Upload -->
                 <input type="file" id="folderInput" webkitdirectory directory multiple accept="image/gif"
                     style="display:none;" />
