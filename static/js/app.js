@@ -515,14 +515,12 @@ function loadCurrentImage() {
     // Check if the image source is the same and cropper is already active
     if (cropper && currentLoadedImageSrc === targetSrc) {
         updateUIForCurrentImage(file, stepEntry);
-        // Keep the zoom level, pan position, and crop box size/position intact!
         return;
     }
 
-    // Image changed! Recreate cropper
+    // Image changed — destroy old cropper, set new src
     cleanupCropper();
     currentLoadedImageSrc = targetSrc;
-
     updateUIForCurrentImage(file, stepEntry);
 
     if (archiveMode) {
@@ -533,28 +531,39 @@ function loadCurrentImage() {
         UI.placeholder.style.display = 'none';
         UI.image.style.display       = 'block';
 
-        if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
-        currentObjectUrl = URL.createObjectURL(file);
-        UI.image.src     = currentObjectUrl;
+        // Use preloaded ObjectURL if available, otherwise create new one
+        if (_nextObjectUrl && _nextFileIndex === currentFileIndex) {
+            currentObjectUrl = _nextObjectUrl;
+            _nextObjectUrl   = null;
+            _nextFileIndex   = -1;
+        } else {
+            if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+            currentObjectUrl = URL.createObjectURL(file);
+        }
+        UI.image.src = currentObjectUrl;
     }
 
     UI.image.onload = () => {
-        // Prevent race condition if target changes before onload fires
         if (currentLoadedImageSrc !== targetSrc) return;
-
-        cropper = new Cropper(UI.image, {
-            viewMode:              1,
-            dragMode:              'crop',
-            responsive:            true,
-            restore:               false,
-            guides:                true,
-            center:                true,
-            highlight:             false,
-            cropBoxMovable:        true,
-            cropBoxResizable:      true,
-            toggleDragModeOnDblclick: false,
-            background:            false,
-            autoCropArea:          0.3
+        // Use requestAnimationFrame so browser paints the image first, then init cropper
+        requestAnimationFrame(() => {
+            cropper = new Cropper(UI.image, {
+                viewMode:                 1,
+                dragMode:                 'crop',
+                responsive:               true,
+                restore:                  false,
+                guides:                   true,
+                center:                   true,
+                highlight:                false,
+                cropBoxMovable:           true,
+                cropBoxResizable:         true,
+                toggleDragModeOnDblclick: false,
+                background:               false,
+                autoCropArea:             0.3,
+                checkOrientation:         false,
+                movable:                  true,
+                zoomable:                 true
+            });
         });
     };
 }
@@ -627,6 +636,24 @@ function canvasToBlob(canvas) {
     return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
 }
 
+// ── Preload next file's ObjectURL in background ───────────────
+let _nextObjectUrl = null;
+let _nextFileIndex = -1;
+
+function preloadNextImage() {
+    if (archiveMode) return; // archive mode uses data URLs, no preload needed
+    const nextIdx = currentFileIndex + 1;
+    if (nextIdx >= gifFiles.length) return;
+    if (_nextFileIndex === nextIdx) return; // already preloaded
+    // Revoke previous preload
+    if (_nextObjectUrl) { URL.revokeObjectURL(_nextObjectUrl); _nextObjectUrl = null; }
+    _nextObjectUrl = URL.createObjectURL(gifFiles[nextIdx]);
+    _nextFileIndex = nextIdx;
+    // Trigger browser to start decoding
+    const preImg = new Image();
+    preImg.src = _nextObjectUrl;
+}
+
 // ── Perform Crop ──────────────────────────────────────────────
 async function performCrop() {
     if (!cropper) return;
@@ -638,23 +665,58 @@ async function performCrop() {
         const baseName     = archiveMode ? archiveBaseName : gifFiles[currentFileIndex].name.replace(/\.[^.]+$/, '');
         const cropFilename = `${baseName}${label}.png`;
 
+        // Get canvas SYNCHRONOUSLY — this is instant
         const canvas = getCroppedCanvas(cropper);
-        const blob   = await canvasToBlob(canvas);
 
-        currentCrops.push({ filename: cropFilename, blob });
+        const nextStep   = findNextStep(currentCropIndex + 1);
+        const isLastCrop = (nextStep === null);
 
-        if (UI.lastCropImg) {
-            UI.lastCropImg.src = URL.createObjectURL(blob);
-            UI.lastCropContainer.style.display = 'block';
-        }
+        if (isLastCrop) {
+            // ── LAST CROP (R4): Load next file IMMEDIATELY, encode blob in background ──
+            const cropsSnap = currentCrops.slice();
+            const baseSnap  = baseName;
+            const origSnap  = archiveMode ? archiveFiles[currentArchiveIndex].name : gifFiles[currentFileIndex].name;
 
-        const nextStep = findNextStep(currentCropIndex + 1);
+            UI.lastCropContainer.style.display = 'none';
 
-        if (nextStep !== null) {
+            // Advance state & show next file RIGHT NOW (before blob is ready)
+            if (archiveMode) {
+                currentArchiveIndex++;
+                archiveStepMap   = {};
+                currentCropIndex = 1;
+                currentCrops     = [];
+                updateCounters();
+                loadCurrentImage();
+            } else {
+                currentFileIndex++;
+                currentCropIndex = 1;
+                currentCrops     = [];
+                saveSessionState();
+                updateCounters();
+                loadCurrentImage();
+            }
+
+            // Encode blob + build archive in background, UI is already on next file
+            canvas.toBlob(blob => {
+                cropsSnap.push({ filename: cropFilename, blob });
+                setTimeout(() => createAndSaveArchive(baseSnap, origSnap, cropsSnap), 0);
+            }, 'image/png');
+
+        } else {
+            // ── NORMAL CROP (L1-R3): encode blob then show next step ──
+            const blob = await canvasToBlob(canvas);
+            currentCrops.push({ filename: cropFilename, blob });
+
+            if (UI.lastCropImg) {
+                UI.lastCropImg.src = URL.createObjectURL(blob);
+                UI.lastCropContainer.style.display = 'block';
+            }
+
+            // Start preloading next file early (on step 7 = R3)
+            if (currentCropIndex >= 7) preloadNextImage();
+
             currentCropIndex = nextStep;
             loadCurrentImage();
-        } else {
-            finalizeArchive();
         }
 
     } catch (err) {
