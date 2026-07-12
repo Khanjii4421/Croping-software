@@ -643,8 +643,6 @@ async function performCrop() {
 
         currentCrops.push({ filename: cropFilename, blob });
 
-        Toast.fire({ icon: 'success', title: `Saved ${CROP_LABELS[currentCropIndex]}` });
-
         if (UI.lastCropImg) {
             UI.lastCropImg.src = URL.createObjectURL(blob);
             UI.lastCropContainer.style.display = 'block';
@@ -656,7 +654,7 @@ async function performCrop() {
             currentCropIndex = nextStep;
             loadCurrentImage();
         } else {
-            await finalizeArchive();
+            finalizeArchive();
         }
 
     } catch (err) {
@@ -669,13 +667,14 @@ async function performCrop() {
 }
 
 // ── Finalize Current Archive ──────────────────────────────────
-async function finalizeArchive() {
+function finalizeArchive() {
     const baseName     = archiveMode ? archiveBaseName : gifFiles[currentFileIndex].name.replace(/\.[^.]+$/, '');
     const originalName = archiveMode ? archiveFiles[currentArchiveIndex].name : gifFiles[currentFileIndex].name;
+    const cropsSnapshot = currentCrops.slice(); // snapshot before reset
 
     UI.lastCropContainer.style.display = 'none';
-    await createAndSaveArchive(baseName, originalName);
 
+    // ── Immediately advance to next file (ZERO delay) ──
     if (archiveMode) {
         currentArchiveIndex++;
         archiveStepMap   = {};
@@ -691,34 +690,30 @@ async function finalizeArchive() {
         updateCounters();
         loadCurrentImage();
     }
+
+    // ── Package & save archive in background (non-blocking) ──
+    setTimeout(() => createAndSaveArchive(baseName, originalName, cropsSnapshot), 0);
 }
 
-// ── Package & Save Archive ────────────────────────────────────
-async function createAndSaveArchive(baseName, originalFileName) {
+// ── Package & Save Archive (runs in background, never blocks UI) ──
+async function createAndSaveArchive(baseName, originalFileName, cropsSnapshot) {
     const isOldMethod = UI.oldMethodCheckbox && UI.oldMethodCheckbox.checked;
-    Swal.fire({ 
-        title: isOldMethod ? 'Packaging RAR…' : 'Packaging ZIP…', 
-        allowOutsideClick: false, 
-        didOpen: () => Swal.showLoading() 
-    });
+    const crops = cropsSnapshot || currentCrops;
 
     try {
         const zip = new JSZip();
-        for (const crop of currentCrops) zip.file(crop.filename, crop.blob);
-        const zipBlob = await zip.generateAsync({ 
-            type: 'blob',
-            compression: 'STORE'
-        });
+        for (const crop of crops) zip.file(crop.filename, crop.blob);
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
         const zipName = isOldMethod ? `${baseName}.rar` : `${baseName}.zip`;
 
         let pathMsg = '';
 
         if (outputDirHandle) {
-            const fh  = await outputDirHandle.getFileHandle(zipName, { create: true });
+            const fh       = await outputDirHandle.getFileHandle(zipName, { create: true });
             const writable = await fh.createWritable();
             await writable.write(zipBlob);
             await writable.close();
-            pathMsg = `Saved to: ${outputDirHandle.name}/${zipName}`;
+            pathMsg = `Saved: ${zipName}`;
         } else {
             const link = document.createElement('a');
             link.href     = URL.createObjectURL(zipBlob);
@@ -726,7 +721,8 @@ async function createAndSaveArchive(baseName, originalFileName) {
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            pathMsg = isOldMethod ? `Downloaded ${zipName}` : 'Downloaded to Downloads/done folder.';
+            URL.revokeObjectURL(link.href);
+            pathMsg = `Downloaded ${zipName}`;
         }
 
         addDownloadLinkHtml(zipName, !!outputDirHandle);
@@ -739,11 +735,10 @@ async function createAndSaveArchive(baseName, originalFileName) {
             }
         }
 
-        Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: pathMsg, showConfirmButton: false, timer: 4000 });
+        Toast.fire({ icon: 'success', title: pathMsg });
 
     } catch (err) {
-        console.error('Zip/Rar error:', err);
-        Swal.fire('Error', isOldMethod ? 'Could not create RAR archive.' : 'Could not create ZIP archive.', 'error');
+        console.error('Archive error:', err);
     }
 }
 
