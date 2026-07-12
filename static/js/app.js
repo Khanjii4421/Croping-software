@@ -620,7 +620,7 @@ function updateUndoButtonState() {
 
 // ── Crop Helpers ──────────────────────────────────────────────
 function getCroppedCanvas(c) {
-    return c.getCroppedCanvas({ imageSmoothingEnabled: true, imageSmoothingQuality: 'high' });
+    return c.getCroppedCanvas({ imageSmoothingEnabled: true });
 }
 
 function canvasToBlob(canvas) {
@@ -705,7 +705,10 @@ async function createAndSaveArchive(baseName, originalFileName) {
     try {
         const zip = new JSZip();
         for (const crop of currentCrops) zip.file(crop.filename, crop.blob);
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        const zipBlob = await zip.generateAsync({ 
+            type: 'blob',
+            compression: 'STORE'
+        });
         const zipName = isOldMethod ? `${baseName}.rar` : `${baseName}.zip`;
 
         let pathMsg = '';
