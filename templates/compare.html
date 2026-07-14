@@ -254,18 +254,18 @@
 
             <!-- Upload Grid -->
             <div class="upload-grid">
-                <input type="file" id="originalFolderInput" webkitdirectory directory multiple style="display:none;" />
+                <input type="file" id="originalFolderInput" multiple accept=".zip,.rar" style="display:none;" />
                 <div class="upload-card" id="cardOriginal" onclick="document.getElementById('originalFolderInput').click()">
                     <i class="fas fa-folder-open"></i>
-                    <h3 id="originalTitle">Original Folder</h3>
-                    <p id="originalText">Select original zip archives folder</p>
+                    <h3 id="originalTitle">Original ZIP Files</h3>
+                    <p id="originalText">Select zip/rar files from your Original folder</p>
                 </div>
 
-                <input type="file" id="doneFolderInput" webkitdirectory directory multiple style="display:none;" />
+                <input type="file" id="doneFolderInput" multiple accept=".zip,.rar" style="display:none;" />
                 <div class="upload-card" id="cardDone" onclick="document.getElementById('doneFolderInput').click()">
                     <i class="fas fa-folder-check"></i>
-                    <h3 id="doneTitle">Done Folder</h3>
-                    <p id="doneText">Select completed zip archives folder</p>
+                    <h3 id="doneTitle">Done ZIP Files</h3>
+                    <p id="doneText">Select zip/rar files from your Done folder</p>
                 </div>
             </div>
 
@@ -382,10 +382,10 @@
             originalFiles = zips;
             elements.valOriginal.textContent = originalFiles.length;
             elements.cardOriginal.classList.add('loaded');
-            elements.originalTitle.textContent = "Original Folder Connected";
-            elements.originalText.textContent = `${originalFiles.length} archives loaded`;
+            elements.originalTitle.textContent = "Original Files Selected";
+            elements.originalText.textContent = `${originalFiles.length} archives selected`;
             
-            Toast.fire({ icon: 'success', title: 'Original folder loaded!' });
+            Toast.fire({ icon: 'success', title: 'Original files loaded!' });
             runComparison();
         });
 
@@ -398,10 +398,10 @@
             doneFiles = zips;
             elements.valDone.textContent = doneFiles.length;
             elements.cardDone.classList.add('loaded');
-            elements.doneTitle.textContent = "Done Folder Connected";
-            elements.doneText.textContent = `${doneFiles.length} archives loaded`;
+            elements.doneTitle.textContent = "Done Files Selected";
+            elements.doneText.textContent = `${doneFiles.length} archives selected`;
 
-            Toast.fire({ icon: 'success', title: 'Done folder loaded!' });
+            Toast.fire({ icon: 'success', title: 'Done files loaded!' });
             runComparison();
         });
 
@@ -504,10 +504,10 @@
             elements.cardOriginal.classList.remove('loaded');
             elements.cardDone.classList.remove('loaded');
             
-            elements.originalTitle.textContent = "Original Folder";
-            elements.originalText.textContent = "Select original zip archives folder";
-            elements.doneTitle.textContent = "Done Folder";
-            elements.doneText.textContent = "Select completed zip archives folder";
+            elements.originalTitle.textContent = "Original ZIP Files";
+            elements.originalText.textContent = "Select zip/rar files from your Original folder";
+            elements.doneTitle.textContent = "Done ZIP Files";
+            elements.doneText.textContent = "Select zip/rar files from your Done folder";
             
             elements.valOriginal.textContent = '0';
             elements.valDone.textContent = '0';
