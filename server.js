@@ -42,6 +42,7 @@ const upload = multer({
 
 // ── Routes ───────────────────────────────────────────────────
 app.get('/',               (req, res) => res.sendFile(path.join(__dirname, 'templates', 'index.html')));
+app.get('/compare',        (req, res) => res.sendFile(path.join(__dirname, 'templates', 'compare.html')));
 app.get('/login',          (req, res) => res.redirect('/'));
 app.get('/reset-password', (req, res) => res.redirect('/'));
 

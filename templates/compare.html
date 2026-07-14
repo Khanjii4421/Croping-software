@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Folder Comparison - Khan Dev</title>
+    <!-- Poppins Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css?v=2">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    
+    <style>
+        .compare-container {
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 30px;
+            background: var(--sidebar-bg);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--panel-border);
+            border-radius: 20px;
+            box-shadow: var(--glass-shadow);
+            z-index: 2;
+            position: relative;
+        }
+
+        .compare-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+
+        .compare-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-color);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .upload-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .upload-card {
+            background: var(--card-bg);
+            border: 2px dashed var(--panel-border);
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .upload-card:hover {
+            border-color: var(--primary-color);
+            background: rgba(88, 166, 255, 0.04);
+            transform: translateY(-2px);
+        }
+
+        .upload-card i {
+            color: var(--primary-color);
+            font-size: 2.5rem;
+            transition: transform 0.3s;
+        }
+
+        .upload-card:hover i {
+            transform: scale(1.1);
+        }
+
+        .upload-card h3 {
+            font-size: 1.05rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .upload-card p {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .upload-card.loaded {
+            border-style: solid;
+            border-color: var(--accent-l);
+            background: rgba(126, 231, 135, 0.04);
+        }
+
+        .upload-card.loaded i {
+            color: var(--accent-l);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 15px 20px;
+            text-align: center;
+        }
+
+        .stat-val {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-top: 5px;
+        }
+
+        .results-section {
+            background: var(--card-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 12px;
+            padding: 20px;
+            display: none;
+        }
+
+        .results-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .search-bar {
+            flex: 1;
+            min-width: 200px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--panel-border);
+            padding: 8px 12px;
+            border-radius: 8px;
+            color: var(--text-main);
+            font-size: 0.85rem;
+            outline: none;
+            transition: all 0.3s;
+        }
+
+        .search-bar:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 10px rgba(88, 166, 255, 0.2);
+        }
+
+        .list-container {
+            max-height: 350px;
+            overflow-y: auto;
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .list-item {
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--panel-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.88rem;
+            transition: background 0.2s;
+        }
+
+        .list-item:last-child {
+            border-bottom: none;
+        }
+
+        .list-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .light-theme .list-item:hover {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        .list-item-name {
+            font-family: monospace;
+            color: var(--accent-r);
+        }
+
+        .success-box {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--accent-l);
+        }
+
+        .success-box i {
+            font-size: 3rem;
+            margin-bottom: 15px;
+        }
+
+        .nav-back-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text-main);
+            padding: 8px 16px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .nav-back-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+            transform: translateX(-3px);
+        }
+    </style>
+</head>
+
+<body class="light-theme">
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <div class="app-container" style="display: block; overflow-y: auto; height: 100vh; padding: 20px;">
+        
+        <div class="compare-container">
+            <div class="compare-header">
+                <a href="/" class="nav-back-btn">
+                    <i class="fas fa-arrow-left"></i> Crop Tool
+                </a>
+                
+                <div class="compare-title">
+                    <i class="fas fa-exchange-alt"></i> Folder Comparison Tool
+                </div>
+
+                <button id="themeToggle" class="theme-toggle" title="Toggle Light/Dark Mode" style="border: 1px solid var(--panel-border); padding: 8px; border-radius: 8px; cursor: pointer; background: transparent; color: var(--primary-color);">
+                    <i class="fas fa-sun" id="themeIcon"></i>
+                </button>
+            </div>
+
+            <!-- Upload Grid -->
+            <div class="upload-grid">
+                <input type="file" id="originalFolderInput" webkitdirectory directory multiple style="display:none;" />
+                <div class="upload-card" id="cardOriginal" onclick="document.getElementById('originalFolderInput').click()">
+                    <i class="fas fa-folder-open"></i>
+                    <h3 id="originalTitle">Original Folder</h3>
+                    <p id="originalText">Select original zip archives folder</p>
+                </div>
+
+                <input type="file" id="doneFolderInput" webkitdirectory directory multiple style="display:none;" />
+                <div class="upload-card" id="cardDone" onclick="document.getElementById('doneFolderInput').click()">
+                    <i class="fas fa-folder-check"></i>
+                    <h3 id="doneTitle">Done Folder</h3>
+                    <p id="doneText">Select completed zip archives folder</p>
+                </div>
+            </div>
+
+            <!-- Stats Grid -->
+            <div class="stats-grid">
+                <div class="stat-card" style="border-top: 3px solid var(--primary-color);">
+                    <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">Original Files</span>
+                    <div class="stat-val" id="valOriginal" style="color: var(--primary-color);">0</div>
+                </div>
+                <div class="stat-card" style="border-top: 3px solid var(--accent-l);">
+                    <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">Done Files</span>
+                    <div class="stat-val" id="valDone" style="color: var(--accent-l);">0</div>
+                </div>
+                <div class="stat-card" id="cardMissing" style="border-top: 3px solid var(--text-muted);">
+                    <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">Missing Files</span>
+                    <div class="stat-val" id="valMissing" style="color: var(--text-muted);">0</div>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="resultsSection">
+                <div class="results-header">
+                    <input type="text" id="searchBar" class="search-bar" placeholder="Search missing files..." />
+                    
+                    <button id="btnCopy" class="primary-btn" style="padding: 8px 16px; font-size: 0.85rem;" disabled>
+                        <i class="fas fa-copy"></i> Copy Missing Names
+                    </button>
+                    <button id="btnReset" class="secondary-btn" style="padding: 8px 16px; font-size: 0.85rem;">
+                        <i class="fas fa-sync-alt"></i> Reset
+                    </button>
+                </div>
+
+                <div class="list-container" id="listContainer">
+                    <!-- Missing files JS populated -->
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        // ── Theme State ──────────────────────────────────────────────
+        const themeIcon = document.getElementById('themeIcon');
+        const themeToggle = document.getElementById('themeToggle');
+
+        (function applyTheme() {
+            const saved = localStorage.getItem('theme') || 'light';
+            if (saved === 'light') {
+                document.body.classList.add('light-theme');
+                themeIcon.classList.replace('fa-sun', 'fa-moon');
+            } else {
+                document.body.classList.remove('light-theme');
+                themeIcon.classList.replace('fa-moon', 'fa-sun');
+            }
+        })();
+
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('light-theme');
+            if (document.body.classList.contains('light-theme')) {
+                themeIcon.classList.replace('fa-sun', 'fa-moon');
+                localStorage.setItem('theme', 'light');
+            } else {
+                themeIcon.classList.replace('fa-moon', 'fa-sun');
+                localStorage.setItem('theme', 'dark');
+            }
+        });
+
+        // ── Compare Logic ──────────────────────────────────────────
+        let originalFiles = [];
+        let doneFiles = [];
+        let missingList = [];
+
+        const elements = {
+            originalFolderInput: document.getElementById('originalFolderInput'),
+            doneFolderInput: document.getElementById('doneFolderInput'),
+            cardOriginal: document.getElementById('cardOriginal'),
+            cardDone: document.getElementById('cardDone'),
+            originalTitle: document.getElementById('originalTitle'),
+            originalText: document.getElementById('originalText'),
+            doneTitle: document.getElementById('doneTitle'),
+            doneText: document.getElementById('doneText'),
+            valOriginal: document.getElementById('valOriginal'),
+            valDone: document.getElementById('valDone'),
+            valMissing: document.getElementById('valMissing'),
+            cardMissing: document.getElementById('cardMissing'),
+            resultsSection: document.getElementById('resultsSection'),
+            listContainer: document.getElementById('listContainer'),
+            searchBar: document.getElementById('searchBar'),
+            btnCopy: document.getElementById('btnCopy'),
+            btnReset: document.getElementById('btnReset')
+        };
+
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 2000,
+            timerProgressBar: true
+        });
+
+        // Helper to filter and extract filename bases
+        function getZipFiles(files) {
+            return Array.from(files).filter(f => /\.(zip|rar)$/i.test(f.name));
+        }
+
+        elements.originalFolderInput.addEventListener('change', (e) => {
+            const zips = getZipFiles(e.target.files);
+            if (zips.length === 0) {
+                Swal.fire('No archives found', 'Please upload a folder containing zip or rar files.', 'warning');
+                return;
+            }
+            originalFiles = zips;
+            elements.valOriginal.textContent = originalFiles.length;
+            elements.cardOriginal.classList.add('loaded');
+            elements.originalTitle.textContent = "Original Folder Connected";
+            elements.originalText.textContent = `${originalFiles.length} archives loaded`;
+            
+            Toast.fire({ icon: 'success', title: 'Original folder loaded!' });
+            runComparison();
+        });
+
+        elements.doneFolderInput.addEventListener('change', (e) => {
+            const zips = getZipFiles(e.target.files);
+            if (zips.length === 0) {
+                Swal.fire('No archives found', 'Please upload a folder containing zip or rar files.', 'warning');
+                return;
+            }
+            doneFiles = zips;
+            elements.valDone.textContent = doneFiles.length;
+            elements.cardDone.classList.add('loaded');
+            elements.doneTitle.textContent = "Done Folder Connected";
+            elements.doneText.textContent = `${doneFiles.length} archives loaded`;
+
+            Toast.fire({ icon: 'success', title: 'Done folder loaded!' });
+            runComparison();
+        });
+
+        function runComparison() {
+            if (originalFiles.length === 0 || doneFiles.length === 0) return;
+
+            // Normalize names (remove extensions, lowercase) to compare
+            const doneNames = new Set(doneFiles.map(f => f.name.replace(/\.[^.]+$/, '').toLowerCase().trim()));
+            
+            missingList = [];
+            originalFiles.forEach(file => {
+                const baseName = file.name.replace(/\.[^.]+$/, '').toLowerCase().trim();
+                if (!doneNames.has(baseName)) {
+                    missingList.push(file.name);
+                }
+            });
+
+            // Update Stats Display
+            elements.valMissing.textContent = missingList.length;
+            if (missingList.length > 0) {
+                elements.cardMissing.style.borderTopColor = 'var(--accent-r)';
+                elements.valMissing.style.color = 'var(--accent-r)';
+            } else {
+                elements.cardMissing.style.borderTopColor = 'var(--accent-l)';
+                elements.valMissing.style.color = 'var(--accent-l)';
+            }
+
+            elements.resultsSection.style.display = 'block';
+            elements.btnCopy.disabled = (missingList.length === 0);
+            
+            renderList(missingList);
+        }
+
+        function renderList(list) {
+            elements.listContainer.innerHTML = '';
+            if (list.length === 0) {
+                elements.listContainer.innerHTML = `
+                    <div class="success-box">
+                        <i class="fas fa-check-circle"></i>
+                        <h3>All Clean!</h3>
+                        <p style="margin-top:5px; color: var(--text-muted);">All original files are present in the Done folder.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            list.forEach((name, index) => {
+                const item = document.createElement('div');
+                item.className = 'list-item';
+                item.innerHTML = `
+                    <span>${index + 1}. <span class="list-item-name">${name}</span></span>
+                    <button class="secondary-btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="copySingle('${name}')">
+                        <i class="fas fa-copy"></i>
+                    </button>
+                `;
+                elements.listContainer.appendChild(item);
+            });
+        }
+
+        // Filter search input
+        elements.searchBar.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const filtered = missingList.filter(name => name.toLowerCase().includes(query));
+            renderList(filtered);
+        });
+
+        // Copy all missing names to clipboard
+        elements.btnCopy.addEventListener('click', () => {
+            if (missingList.length === 0) return;
+            const textToCopy = missingList.join('\n');
+            navigator.clipboard.writeText(textToCopy).then(() => {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Copied!',
+                    text: `${missingList.length} missing filenames copied to clipboard.`,
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+            }).catch(err => {
+                Swal.fire('Error', 'Failed to copy text: ' + err, 'error');
+            });
+        });
+
+        // Copy single file name helper
+        window.copySingle = function(name) {
+            navigator.clipboard.writeText(name).then(() => {
+                Toast.fire({ icon: 'success', title: 'Copied to clipboard' });
+            });
+        };
+
+        // Reset inputs
+        elements.btnReset.addEventListener('click', () => {
+            originalFiles = [];
+            doneFiles = [];
+            missingList = [];
+            
+            elements.originalFolderInput.value = '';
+            elements.doneFolderInput.value = '';
+            
+            elements.cardOriginal.classList.remove('loaded');
+            elements.cardDone.classList.remove('loaded');
+            
+            elements.originalTitle.textContent = "Original Folder";
+            elements.originalText.textContent = "Select original zip archives folder";
+            elements.doneTitle.textContent = "Done Folder";
+            elements.doneText.textContent = "Select completed zip archives folder";
+            
+            elements.valOriginal.textContent = '0';
+            elements.valDone.textContent = '0';
+            elements.valMissing.textContent = '0';
+            
+            elements.cardMissing.style.borderTopColor = 'var(--text-muted)';
+            elements.valMissing.style.color = 'var(--text-muted)';
+            
+            elements.searchBar.value = '';
+            elements.resultsSection.style.display = 'none';
+            elements.listContainer.innerHTML = '';
+            elements.btnCopy.disabled = true;
+
+            Toast.fire({ icon: 'info', title: 'Cleared' });
+        });
+    </script>
+</body>
+
+</html>
