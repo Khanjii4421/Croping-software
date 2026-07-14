@@ -11,7 +11,7 @@
     <!-- Cropper.js CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/style.css?v=2">
+    <link rel="stylesheet" href="/static/css/style.css?v=3">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/static/favicon.png">
@@ -24,6 +24,8 @@
     <div class="bg-glow bg-glow-3"></div>
 
     <div class="app-container">
+        <!-- Mobile Sidebar Overlay -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
         <!-- Sidebar -->
         <aside class="sidebar">
             <div class="logo">
@@ -140,7 +142,11 @@
         <!-- Main Content -->
         <main class="main-content">
             <div class="header">
-                <div style="display:flex; align-items:center; gap: 15px;">
+                <div style="display:flex; align-items:center; gap: 10px; flex-shrink: 0;">
+                    <!-- Mobile Hamburger Menu -->
+                    <button class="mobile-menu-btn" id="mobileMenuBtn" title="Open Menu">
+                        <i class="fas fa-bars"></i>
+                    </button>
                     <button id="themeToggle" class="theme-toggle" title="Toggle Light/Dark Mode">
                         <i class="fas fa-sun" id="themeIcon"></i>
                     </button>
@@ -186,6 +192,40 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="/static/js/auth.js?v=2"></script>
     <script src="/static/js/app.js?v=4"></script>
+
+    <!-- Mobile Sidebar Toggle -->
+    <script>
+        (function () {
+            const sidebar = document.querySelector('.sidebar');
+            const overlay = document.getElementById('sidebarOverlay');
+            const menuBtn = document.getElementById('mobileMenuBtn');
+
+            function openSidebar() {
+                sidebar.classList.add('mobile-open');
+                overlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+
+            function closeSidebar() {
+                sidebar.classList.remove('mobile-open');
+                overlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
+            if (menuBtn) menuBtn.addEventListener('click', openSidebar);
+            if (overlay) overlay.addEventListener('click', closeSidebar);
+
+            // Close sidebar when any link/button inside sidebar is clicked on mobile
+            if (sidebar) {
+                sidebar.addEventListener('click', function (e) {
+                    if (window.innerWidth <= 768) {
+                        const target = e.target.closest('a, label[for="folderInput"]');
+                        if (target) closeSidebar();
+                    }
+                });
+            }
+        })();
+    </script>
 </body>
 
 </html>
